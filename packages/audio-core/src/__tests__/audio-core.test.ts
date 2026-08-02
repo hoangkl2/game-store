@@ -1,0 +1,19 @@
+import { describe, expect, it } from "vitest";
+import { AudioCommandQueue, clampVolume, defaultAudioPreferences, effectiveCommandVolume, getAudioAsset, normalizeAudioPreferences, shouldPlayCommand } from "../index";
+
+const command = (id: string, overrides = {}) => ({ id, category: "GAMEPLAY" as const, priority: "NORMAL" as const, assetId: "color-card-played" as const, sourceEventId: `event-${id}`, authorizedAudience: "PUBLIC" as const, createdAt: 1, ...overrides });
+describe("audio core", () => {
+  it("normalizes safe persisted preferences and clamps volumes", () => { expect(clampVolume(4, 0)).toBe(1); expect(clampVolume(-1, 0.5)).toBe(0); expect(normalizeAudioPreferences({ masterVolume: 2, inactivePolicy: "bad" })).toMatchObject({ ...defaultAudioPreferences, masterVolume: 1 }); });
+  it("accepts complete valid preferences and safely rejects each invalid primitive", () => {
+    expect(normalizeAudioPreferences({ masterEnabled: false, musicEnabled: false, sfxEnabled: false, voiceEnabled: false, masterVolume: 0.2, musicVolume: 0.3, sfxVolume: 0.4, voiceVolume: 0.5, captionsEnabled: false, inactivePolicy: "MUTE", reducedSensory: true })).toMatchObject({ masterEnabled: false, inactivePolicy: "MUTE", reducedSensory: true, voiceVolume: 0.5 });
+    expect(normalizeAudioPreferences({ masterEnabled: "no", musicEnabled: "no", sfxEnabled: "no", voiceEnabled: "no", masterVolume: null, musicVolume: "bad", sfxVolume: Infinity, voiceVolume: undefined, captionsEnabled: "no", inactivePolicy: "NO", reducedSensory: "no" })).toEqual(defaultAudioPreferences);
+  });
+  it("calculates category gain and honors mute boundaries", () => { expect(effectiveCommandVolume("GAMEPLAY", defaultAudioPreferences)).toBeCloseTo(0.56); expect(effectiveCommandVolume("MUSIC", defaultAudioPreferences, 0.5)).toBeCloseTo(0.18); expect(shouldPlayCommand("MUSIC", { ...defaultAudioPreferences, musicEnabled: false })).toBe(false); expect(shouldPlayCommand("SYSTEM", { ...defaultAudioPreferences, masterEnabled: false })).toBe(false); expect(shouldPlayCommand("ROOM", defaultAudioPreferences)).toBe(true); expect(getAudioAsset("game-result").frequency).toBe(720); });
+  it("orders, deduplicates, cleans groups, and drops decoration", () => { const queue = new AudioCommandQueue(); expect(queue.enqueue(command("one"))).toBe(true); expect(queue.enqueue(command("one"))).toBe(false); queue.enqueue(command("decorative", { priority: "DECORATIVE" })); queue.enqueue(command("room", { interruptGroup: "room" })); expect(queue.takeNext()?.id).toBe("one"); queue.discardDecorative(); queue.stopGroup("room"); queue.complete(); expect(queue.takeNext()).toBeUndefined(); });
+  it("clears stale audio on reconnect without retaining a current command", () => { const queue = new AudioCommandQueue(); queue.enqueue(command("old", { sourceEventSequence: 1 })); queue.takeNext(); queue.enqueue(command("new", { sourceEventSequence: 2 })); queue.clearObsolete(2); expect(queue.snapshot().current).toBeUndefined(); queue.resetForReconnect(); expect(queue.snapshot().queue).toEqual([]); });
+  it("notifies listeners and rejects invalid or repeated noncritical asset sources", () => {
+    const queue = new AudioCommandQueue(); let notifications = 0; const unsubscribe = queue.subscribe(() => { notifications += 1; });
+    expect(queue.enqueue(command("a"))).toBe(true); expect(queue.enqueue(command("b", { sourceEventId: "event-a" }))).toBe(false); expect(queue.takeNext()?.id).toBe("a"); queue.complete("wrong"); expect(queue.snapshot().current?.id).toBe("a"); queue.stopGroup("missing"); unsubscribe(); queue.complete(); expect(notifications).toBeGreaterThan(0);
+    expect(() => queue.enqueue(command("invalid", { createdAt: Number.NaN }))).toThrow("Invalid audio command"); expect(() => queue.enqueue(command("volume", { volume: -1 }))).toThrow("Invalid audio command");
+  });
+});

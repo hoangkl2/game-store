@@ -1,0 +1,14 @@
+"use client";
+
+import { useRef } from "react";
+import type { AudioCommand } from "@game-store/audio-core";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { AudioCaption, EnableSoundControl } from "@/features/audio/primitives";
+import { useAudio } from "@/features/audio/provider";
+
+export function AudioPreview() {
+  const { preferences, playback, setPreferences, submit, resetForReconnect } = useAudio(); const sequence = useRef(0);
+  const cue = (priority: AudioCommand["priority"] = "NORMAL") => { sequence.current += 1; submit([{ id: `preview-${sequence.current}`, category: "GAMEPLAY", priority, assetId: "color-card-played", sourceEventId: `preview-event-${sequence.current}`, authorizedAudience: "PUBLIC", caption: priority === "DECORATIVE" ? "Decorative cue." : "Preview cue played.", createdAt: sequence.current }]); };
+  return <main className="mx-auto max-w-[var(--readable-max)] space-y-5 p-[var(--page-padding)]"><AudioCaption /><header><p className="font-semibold text-primary">Development-only audio preview</p><h1 className="mt-1 font-display text-3xl font-bold">Audio system</h1><p className="mt-2 text-muted-foreground">Original generated tones only. Committed events and captions remain separate from game authority.</p></header><Card><h2 className="font-bold">Sound access</h2><div className="mt-3"><EnableSoundControl /></div><p className="mt-3 text-sm text-muted-foreground">Status: {playback.status} / pending cues: {playback.pendingCount}</p></Card><Card><h2 className="font-bold">Preferences</h2><div className="mt-3 flex flex-wrap gap-2"><Button size="compact" variant={preferences.masterEnabled ? "secondary" : "outline"} aria-pressed={preferences.masterEnabled} onClick={() => setPreferences({ masterEnabled: !preferences.masterEnabled })}>Master {preferences.masterEnabled ? "on" : "off"}</Button><Button size="compact" variant={preferences.captionsEnabled ? "secondary" : "outline"} aria-pressed={preferences.captionsEnabled} onClick={() => setPreferences({ captionsEnabled: !preferences.captionsEnabled })}>Captions {preferences.captionsEnabled ? "on" : "off"}</Button><Button size="compact" variant={preferences.reducedSensory ? "secondary" : "outline"} aria-pressed={preferences.reducedSensory} onClick={() => setPreferences({ reducedSensory: !preferences.reducedSensory })}>Reduced sensory {preferences.reducedSensory ? "on" : "off"}</Button></div></Card><Card><h2 className="font-bold">Committed cue controls</h2><div className="mt-3 flex flex-wrap gap-2"><Button onClick={() => cue()}>Queue public cue</Button><Button variant="outline" onClick={() => cue("DECORATIVE")}>Queue decoration</Button><Button variant="outline" onClick={resetForReconnect}>Simulate reconnect</Button></div><p className="mt-3 text-sm text-muted-foreground" role="status">Last caption: {playback.lastCaption ?? "None"}</p></Card></main>;
+}

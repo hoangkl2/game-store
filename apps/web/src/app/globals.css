@@ -1,0 +1,135 @@
+@import "tailwindcss";
+@import "../../../../packages/ui/src/styles.css";
+@source "../../../../packages/ui/src";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-secondary-active: var(--secondary-active);
+  --color-secondary-subtle: var(--secondary-subtle);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-active: var(--success-active);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-active: var(--warning-active);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-active: var(--danger-active);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-info: var(--info);
+  --color-info-hover: var(--info-hover);
+  --color-info-active: var(--info-active);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-foreground: var(--info-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-divider: var(--divider);
+  --color-input: var(--input);
+  --color-ring: var(--focus-ring);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-data: var(--font-data);
+  --radius-control: var(--radius-control);
+  --radius-input: var(--radius-input);
+  --radius-button: var(--radius-button);
+  --radius-card: var(--radius-card);
+  --radius-elevated: var(--radius-elevated);
+  --radius-dialog: var(--radius-dialog);
+  --radius-gameplay: var(--radius-gameplay);
+  --duration-fast: var(--duration-fast);
+  --duration-standard: var(--duration-standard);
+  --duration-deliberate: var(--duration-deliberate);
+  --duration-cinematic: var(--duration-cinematic);
+  --duration-celebration: var(--duration-celebration);
+}
+
+[data-game-theme="moon-village"] {
+  --moon-accent: #745000;
+  --moon-private: color-mix(in oklab, var(--surface) 88%, #26345f 12%);
+  background-image: radial-gradient(circle at 50% 0%, color-mix(in oklab, var(--moon-accent) 12%, transparent), transparent 32rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-game-theme="moon-village"] { --moon-accent: #f1ce78; --moon-private: color-mix(in oklab, var(--surface) 78%, #26345f 22%); }
+}
+
+@media (forced-colors: active) {
+  [data-game-theme="moon-village"] { --moon-accent: Highlight; --moon-private: Canvas; background-image: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-game-theme="moon-village"] * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+@layer base {
+  * { border-color: var(--border); }
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+  body { min-height: 100vh; background: var(--background); color: var(--foreground); font-family: var(--font-sans); text-rendering: optimizeLegibility; }
+  button, input, select, textarea { font: inherit; }
+  ::selection { background: var(--accent); color: var(--accent-foreground); }
+  :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; box-shadow: var(--focus-glow); }
+}
+
+.ds-glass-subtle { background: var(--glass-subtle-bg); border: 1px solid var(--border); box-shadow: var(--shadow-1); backdrop-filter: blur(var(--glass-subtle-blur)); }
+.ds-glass-elevated { background: var(--glass-elevated-bg); border: 1px solid var(--border); box-shadow: var(--shadow-2); backdrop-filter: blur(var(--glass-elevated-blur)); }
+.ds-glass-hud { background: var(--glass-hud-bg); border: 1px solid var(--border); box-shadow: var(--shadow-2); backdrop-filter: blur(var(--glass-hud-blur)); }
+
+@supports not (backdrop-filter: blur(1px)) {
+  .ds-glass-subtle, .ds-glass-elevated, .ds-glass-hud { background: var(--surface-elevated); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+
+@keyframes royal-race-commit {
+  0% { transform: scale(0.8); }
+  55% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+.royal-race-token[data-committed="true"] { animation: royal-race-commit var(--duration-standard) var(--ease-emphasized); box-shadow: var(--valid-action-glow); }
+
+@keyframes property-empire-arrival {
+  0% { transform: translateY(-20%) scale(0.85); }
+  60% { transform: translateY(0) scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.property-empire-token[data-committed="true"] { animation: property-empire-arrival var(--duration-standard) var(--ease-emphasized); box-shadow: var(--valid-action-glow); }
+
+.motion-page-enter { animation: motion-page-enter var(--duration-fast) var(--ease-enter); }
+.motion-presence-enter { animation: motion-presence-enter var(--duration-standard) var(--ease-emphasized); }
+.motion-celebration { animation: motion-celebration var(--duration-celebration) var(--ease-emphasized); pointer-events: none; }
+@keyframes motion-page-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes motion-presence-enter { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes motion-celebration { 0%, 100% { opacity: 0; transform: scale(0.98); } 18%, 78% { opacity: 1; transform: scale(1); } }

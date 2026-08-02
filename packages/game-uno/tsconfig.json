@@ -1,0 +1,1 @@
+{ "extends": "../../tsconfig.json", "compilerOptions": { "paths": { "@game-store/game-core": ["../game-core/src/index.ts"] } }, "include": ["src"], "exclude": ["src/__tests__"] }

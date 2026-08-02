@@ -1,0 +1,117 @@
+name: game-store
+
+x-api-environment: &api-environment
+  NODE_ENV: development
+  PORT: 4000
+  INSTANCE_ID: api-compose-default
+  DATABASE_URL: postgresql://game_store:local_dev_credential@postgres:5432/game_store?schema=public
+  DATABASE_REQUIRED: "true"
+  REDIS_URL: redis://redis:6379
+  REDIS_REQUIRED: "true"
+  REDIS_KEY_PREFIX: "gs:development:v1:"
+  ACCESS_TOKEN_SECRET: local-compose-access-secret-32-bytes-minimum
+  ACCESS_TOKEN_ISSUER: game-store-api
+  ACCESS_TOKEN_AUDIENCE: game-store-web
+  ACCESS_TOKEN_TTL_SECONDS: 600
+  REFRESH_TOKEN_TTL_SECONDS: 2592000
+  STATE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  COOKIE_SECURE: "false"
+  COOKIE_SAME_SITE: lax
+  CORS_ORIGINS: http://localhost:3000
+  CSRF_COOKIE_NAME: gs_csrf
+  REFRESH_COOKIE_NAME: gs_refresh
+  MAX_HTTP_BODY_BYTES: 16384
+  MAX_SOCKET_PAYLOAD_BYTES: 8192
+  TRUST_PROXY: "true"
+
+x-api: &api
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  restart: unless-stopped
+  environment: *api-environment
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  stop_grace_period: 30s
+
+services:
+  postgres:
+    image: postgres:16.4-bookworm
+    environment:
+      POSTGRES_DB: game_store
+      POSTGRES_USER: game_store
+      POSTGRES_PASSWORD: local_dev_credential
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U game_store -d game_store"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7.4.1-bookworm
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--save", "60", "1000"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "6379:6379"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: build
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pnpm", "--filter", "@game-store/api", "prisma:migrate"]
+    restart: "no"
+
+  api-1:
+    <<: *api
+    environment:
+      <<: *api-environment
+      INSTANCE_ID: api-compose-1
+    ports:
+      - "4001:4000"
+
+  api-2:
+    <<: *api
+    environment:
+      <<: *api-environment
+      INSTANCE_ID: api-compose-2
+    ports:
+      - "4002:4000"
+
+  gateway:
+    image: nginx:1.27.2-alpine
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/v1/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

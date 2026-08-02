@@ -1,0 +1,545 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+  DELETED
+}
+
+enum UserRole {
+  PLAYER
+  MODERATOR
+  ADMINISTRATOR
+  SUPPORT
+}
+
+enum AuthSessionStatus {
+  ACTIVE
+  ROTATED
+  REVOKED
+  EXPIRED
+}
+
+enum RoomStatus {
+  WAITING
+  STARTING
+  IN_GAME
+  FINISHED
+  CLOSED
+  EXPIRED
+}
+
+enum RoomMemberRole {
+  HOST
+  PLAYER
+  SPECTATOR
+}
+
+enum SeatControl {
+  HUMAN
+  BOT
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+enum MatchmakingStatus {
+  QUEUED
+  PROPOSED
+  ACCEPTED
+  CANCELLED
+  EXPIRED
+  MATCHED
+}
+
+enum GameSessionStatus {
+  CREATED
+  STARTING
+  ACTIVE
+  PAUSED
+  FINISHED
+  CANCELLED
+  CLOSED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  REJECTED
+  EXPIRED
+}
+
+enum ReconnectStatus {
+  ACTIVE
+  CONSUMED
+  REVOKED
+  EXPIRED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AuditOutcome {
+  SUCCESS
+  DENIED
+  FAILURE
+}
+
+model User {
+  id              String              @id @default(uuid()) @db.Uuid
+  normalizedEmail String              @unique @db.VarChar(320)
+  passwordHash    String
+  status          UserStatus          @default(ACTIVE)
+  role            UserRole            @default(PLAYER)
+  authEpoch       Int                 @default(0)
+  emailVerifiedAt DateTime?
+  schemaVersion   Int                 @default(1)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  profile         Profile?
+  authSessions    AuthSession[]
+  roomMembers     RoomMember[]
+  gameSeats       GameSeat[]
+  results         ResultParticipant[]
+  rankings        Ranking[]
+  achievements    UserAchievement[]
+  invitations     Invitation[]
+  matchmaking     MatchmakingTicket[]
+
+  @@index([status, updatedAt])
+}
+
+model AuthSession {
+  id                  String            @id @default(uuid()) @db.Uuid
+  userId              String            @db.Uuid
+  familyId            String            @db.Uuid
+  tokenHash           String            @unique @db.VarChar(64)
+  csrfTokenHash       String            @db.VarChar(64)
+  rotation            Int               @default(0)
+  status              AuthSessionStatus @default(ACTIVE)
+  deviceLabel         String?           @db.VarChar(128)
+  expiresAt           DateTime
+  lastUsedAt          DateTime?
+  rotatedAt           DateTime?
+  replacedBySessionId String?           @db.Uuid
+  revokedAt           DateTime?
+  schemaVersion       Int               @default(1)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, expiresAt])
+  @@index([familyId, status])
+  @@index([expiresAt])
+}
+
+model Profile {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @unique @db.Uuid
+  normalizedHandle String   @unique @db.VarChar(32)
+  displayName      String   @db.VarChar(80)
+  locale           String   @default("vi-VN") @db.VarChar(16)
+  preferences      Json     @default("{}")
+  schemaVersion    Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Room {
+  id             String        @id @default(uuid()) @db.Uuid
+  normalizedCode String        @unique @db.VarChar(12)
+  gameSlug       String        @db.VarChar(64)
+  status         RoomStatus    @default(WAITING)
+  visibility     String        @default("PRIVATE") @db.VarChar(16)
+  hostIdentityId String        @db.VarChar(128)
+  settings       Json          @default("{}")
+  version        Int           @default(1)
+  capacity       Int           @default(4)
+  spectatorLimit Int           @default(0)
+  expiresAt      DateTime
+  schemaVersion  Int           @default(1)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  members        RoomMember[]
+  invitations    Invitation[]
+  gameSessions   GameSession[]
+
+  @@index([status, expiresAt])
+  @@index([hostIdentityId, status])
+}
+
+model RoomMember {
+  id            String         @id @default(uuid()) @db.Uuid
+  roomId        String         @db.Uuid
+  userId        String?        @db.Uuid
+  identityId    String         @db.VarChar(128)
+  playerId      String         @db.VarChar(128)
+  displayName   String         @db.VarChar(80)
+  seatIndex     Int
+  role          RoomMemberRole @default(PLAYER)
+  control       SeatControl    @default(HUMAN)
+  controlEpoch  Int            @default(0)
+  ready         Boolean        @default(false)
+  connected     Boolean        @default(false)
+  joinedAt      DateTime       @default(now())
+  schemaVersion Int            @default(1)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  room          Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([roomId, identityId])
+  @@unique([roomId, playerId])
+  @@unique([roomId, seatIndex])
+  @@index([identityId, updatedAt])
+}
+
+model Invitation {
+  id            String           @id @default(uuid()) @db.Uuid
+  roomId        String           @db.Uuid
+  issuerId      String           @db.Uuid
+  recipientHint String?          @db.VarChar(320)
+  tokenHash     String           @unique @db.VarChar(64)
+  status        InvitationStatus @default(PENDING)
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  schemaVersion Int              @default(1)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  room          Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  issuer        User             @relation(fields: [issuerId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, status])
+  @@index([expiresAt])
+}
+
+model MatchmakingTicket {
+  id              String            @id @default(uuid()) @db.Uuid
+  identityId      String            @db.VarChar(128)
+  userId          String            @db.Uuid
+  gameType        String            @db.VarChar(64)
+  playlist        String            @db.VarChar(64)
+  rulePreset      String            @db.VarChar(64)
+  partyId         String?           @db.VarChar(128)
+  region          String            @db.VarChar(32)
+  rating          Int               @default(1000)
+  latencyMs       Int?
+  expansionPolicy Json              @default("{}")
+  status          MatchmakingStatus @default(QUEUED)
+  enteredAt       DateTime          @default(now())
+  expiresAt       DateTime
+  schemaVersion   Int               @default(1)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([identityId, gameType, playlist, status])
+  @@index([status, gameType, region, rating, enteredAt])
+  @@index([expiresAt])
+}
+
+model GameSession {
+  id                  String              @id @default(uuid()) @db.Uuid
+  roomId              String?             @db.Uuid
+  gameType            String              @db.VarChar(64)
+  status              GameSessionStatus   @default(CREATED)
+  gameVersion         String              @db.VarChar(32)
+  ruleConfigVersion   Int                 @default(1)
+  ruleConfig          Json
+  stateVersion        Int                 @default(0)
+  eventSequence       Int                 @default(0)
+  randomSeed          String              @db.VarChar(128)
+  currentTurnPlayerId String?             @db.VarChar(128)
+  turnStartedAt       DateTime?
+  turnExpiresAt       DateTime?
+  latestSnapshotId    String?             @db.Uuid
+  ownerEpoch          Int                 @default(0)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  schemaVersion       Int                 @default(1)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  room                Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  seats               GameSeat[]
+  snapshots           GameSnapshot[]
+  events              GameEvent[]
+  commands            GameCommand[]
+  idempotencyRecords  IdempotencyRecord[]
+  reconnectSessions   ReconnectSession[]
+  result              GameResult?
+  achievementGrants   UserAchievement[]
+
+  @@index([roomId, status])
+  @@index([status, updatedAt])
+}
+
+model GameSeat {
+  id            String      @id @default(uuid()) @db.Uuid
+  gameSessionId String      @db.Uuid
+  userId        String?     @db.Uuid
+  identityId    String      @db.VarChar(128)
+  playerId      String      @db.VarChar(128)
+  displayName   String      @db.VarChar(80)
+  seatIndex     Int
+  control       SeatControl @default(HUMAN)
+  controlEpoch  Int         @default(0)
+  finalRank     Int?
+  schemaVersion Int         @default(1)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  gameSession   GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([gameSessionId, identityId])
+  @@unique([gameSessionId, playerId])
+  @@unique([gameSessionId, seatIndex])
+}
+
+model GameSnapshot {
+  id                String      @id @default(uuid()) @db.Uuid
+  gameSessionId     String      @db.Uuid
+  gameVersion       String      @db.VarChar(32)
+  stateVersion      Int
+  eventSequence     Int
+  projectionVersion Int         @default(1)
+  codec             String      @default("JSON_AES_256_GCM") @db.VarChar(32)
+  encryptedPayload  String
+  checksum          String      @db.VarChar(64)
+  reason            String      @db.VarChar(32)
+  quarantinedAt     DateTime?
+  schemaVersion     Int         @default(1)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  gameSession       GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, stateVersion])
+  @@index([gameSessionId, stateVersion(sort: Desc)])
+}
+
+model GameEvent {
+  id                    String      @id @default(uuid()) @db.Uuid
+  gameSessionId         String      @db.Uuid
+  sequence              Int
+  resultingStateVersion Int
+  eventType             String      @db.VarChar(128)
+  eventVersion          Int         @default(1)
+  requestId             String      @db.VarChar(128)
+  actorPlayerId         String?     @db.VarChar(128)
+  encryptedPayload      String
+  schemaVersion         Int         @default(1)
+  occurredAt            DateTime    @default(now())
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  gameSession           GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, sequence])
+  @@unique([gameSessionId, requestId, sequence])
+  @@index([requestId])
+}
+
+model GameCommand {
+  id               String      @id @default(uuid()) @db.Uuid
+  gameSessionId    String      @db.Uuid
+  stateVersion     Int
+  requestId        String      @db.VarChar(128)
+  actorPlayerId    String      @db.VarChar(128)
+  encryptedPayload String
+  checksum         String      @db.VarChar(64)
+  schemaVersion    Int         @default(1)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  gameSession      GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, stateVersion])
+  @@unique([gameSessionId, requestId])
+  @@index([gameSessionId, stateVersion(sort: Asc)])
+}
+
+model IdempotencyRecord {
+  id                    String            @id @default(uuid()) @db.Uuid
+  gameSessionId         String            @db.Uuid
+  identityId            String            @db.VarChar(128)
+  requestId             String            @db.VarChar(128)
+  actionHash            String            @db.VarChar(64)
+  status                IdempotencyStatus @default(PROCESSING)
+  ownerToken            String            @db.VarChar(128)
+  claimExpiresAt        DateTime
+  accepted              Boolean?
+  resultingStateVersion Int?
+  response              Json?
+  completedAt           DateTime?
+  expiresAt             DateTime
+  schemaVersion         Int               @default(1)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  gameSession           GameSession       @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, identityId, requestId])
+  @@index([expiresAt])
+  @@index([status, claimExpiresAt])
+}
+
+model ReconnectSession {
+  id                String          @id @default(uuid()) @db.Uuid
+  gameSessionId     String          @db.Uuid
+  identityId        String          @db.VarChar(128)
+  playerId          String          @db.VarChar(128)
+  controlEpoch      Int
+  tokenHash         String          @unique @db.VarChar(64)
+  status            ReconnectStatus @default(ACTIVE)
+  lastEventSequence Int             @default(0)
+  expiresAt         DateTime
+  consumedAt        DateTime?
+  replacedById      String?         @db.Uuid
+  schemaVersion     Int             @default(1)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  gameSession       GameSession     @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@index([gameSessionId, identityId, status])
+  @@index([expiresAt])
+}
+
+model GameResult {
+  id               String              @id @default(uuid()) @db.Uuid
+  gameSessionId    String              @unique @db.Uuid
+  gameType         String              @db.VarChar(64)
+  winnerPlayerId   String?             @db.VarChar(128)
+  completionReason String              @db.VarChar(32)
+  durationSeconds  Int
+  rulePreset       String              @db.VarChar(64)
+  statistics       Json                @default("{}")
+  rated            Boolean             @default(false)
+  schemaVersion    Int                 @default(1)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  gameSession      GameSession         @relation(fields: [gameSessionId], references: [id], onDelete: Restrict)
+  participants     ResultParticipant[]
+}
+
+model ResultParticipant {
+  id            String      @id @default(uuid()) @db.Uuid
+  resultId      String      @db.Uuid
+  userId        String?     @db.Uuid
+  playerId      String      @db.VarChar(128)
+  rank          Int
+  control       SeatControl
+  statistics    Json        @default("{}")
+  schemaVersion Int         @default(1)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  result        GameResult  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([resultId, playerId])
+  @@index([userId, createdAt])
+}
+
+model Ranking {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  gameType         String   @db.VarChar(64)
+  seasonId         String   @db.VarChar(64)
+  rating           Int      @default(1000)
+  gamesPlayed      Int      @default(0)
+  algorithmVersion Int      @default(1)
+  schemaVersion    Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameType, seasonId])
+  @@index([gameType, seasonId, rating(sort: Desc)])
+}
+
+model Achievement {
+  id                String            @id @default(uuid()) @db.Uuid
+  code              String            @db.VarChar(128)
+  definitionVersion Int
+  definition        Json
+  active            Boolean           @default(true)
+  schemaVersion     Int               @default(1)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  grants            UserAchievement[]
+
+  @@unique([code, definitionVersion])
+}
+
+model UserAchievement {
+  id                String       @id @default(uuid()) @db.Uuid
+  userId            String       @db.Uuid
+  achievementId     String       @db.Uuid
+  definitionVersion Int
+  sourceSessionId   String?      @db.Uuid
+  progress          Json         @default("{}")
+  grantedAt         DateTime?
+  schemaVersion     Int          @default(1)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement       Achievement  @relation(fields: [achievementId], references: [id], onDelete: Restrict)
+  sourceSession     GameSession? @relation(fields: [sourceSessionId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, achievementId, definitionVersion, sourceSessionId])
+  @@index([userId, grantedAt])
+}
+
+model AuditLog {
+  id            String       @id @default(uuid()) @db.Uuid
+  action        String       @db.VarChar(128)
+  outcome       AuditOutcome
+  actorId       String?      @db.VarChar(128)
+  subjectId     String?      @db.VarChar(128)
+  resourceType  String?      @db.VarChar(64)
+  resourceId    String?      @db.VarChar(128)
+  requestId     String?      @db.VarChar(128)
+  traceId       String?      @db.VarChar(128)
+  metadata      Json         @default("{}")
+  schemaVersion Int          @default(1)
+  occurredAt    DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([actorId, occurredAt])
+  @@index([subjectId, occurredAt])
+  @@index([action, occurredAt])
+}
+
+model OutboxEvent {
+  id               String       @id @default(uuid()) @db.Uuid
+  aggregateType    String       @db.VarChar(64)
+  aggregateId      String       @db.VarChar(128)
+  aggregateVersion Int
+  eventType        String       @db.VarChar(128)
+  payload          Json
+  status           OutboxStatus @default(PENDING)
+  attempts         Int          @default(0)
+  availableAt      DateTime     @default(now())
+  processedAt      DateTime?
+  lastError        String?      @db.VarChar(512)
+  schemaVersion    Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([aggregateType, aggregateId, aggregateVersion, eventType])
+  @@index([status, availableAt])
+}

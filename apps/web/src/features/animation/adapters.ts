@@ -1,0 +1,13 @@
+import type { AnimationCommand } from "@game-store/animation-core";
+import type { UnoEvent } from "@game-store/game-uno";
+import type { RoyalRaceEvent } from "@game-store/game-royal-race";
+import type { PropertyEmpireEvent } from "@game-store/game-property-empire";
+import type { MoonVillagePublicProjection } from "@game-store/game-moon-village";
+
+const create = (type: string, sourceEventId: string, sourceEventSequence: number, payload: Record<string, unknown>, overrides: Partial<AnimationCommand> = {}): AnimationCommand => ({ id: `${sourceEventId}:${type}`, type, sourceEventId, sourceEventSequence, payload, priority: "NORMAL", blocking: false, skippable: true, durationMs: 220, createdAt: sourceEventSequence, ...overrides });
+
+export const adaptColorClashEvent = (event: UnoEvent, sourceEventId: string, sequence: number) => event.type === "CARD_PLAYED" ? [create("COLOR_CLASH_CARD_PLAYED", sourceEventId, sequence, { playerId: event.playerId, cardId: event.card.id, color: event.card.color })] : event.type === "GAME_WON" ? [create("GAME_RESULT", sourceEventId, sequence, { winnerId: event.playerId }, { priority: "CRITICAL", durationMs: 900 })] : [];
+export const adaptRoyalRaceEvent = (event: RoyalRaceEvent, sourceEventId: string, sequence: number) => event.type === "PIECE_MOVED" ? [create("ROYAL_RACE_TOKEN_MOVED", sourceEventId, sequence, { pieceId: event.pieceId, toCellId: event.toCellId }, { durationMs: 380 })] : event.type === "DICE_ROLLED" ? [create("ROYAL_RACE_DICE_SETTLED", sourceEventId, sequence, { playerId: event.playerId, value: event.value }, { priority: "CRITICAL", blocking: true, durationMs: 180 })] : [];
+export const adaptPropertyEmpireEvent = (event: PropertyEmpireEvent, sourceEventId: string, sequence: number) => event.type === "TOKEN_MOVED" ? [create("PROPERTY_EMPIRE_TOKEN_MOVED", sourceEventId, sequence, { playerId: event.playerId, toTileId: event.toTileId }, { durationMs: 380 })] : event.type === "EVENT_CARD_DRAWN" ? [create("PROPERTY_EMPIRE_EVENT_REVEAL", sourceEventId, sequence, { playerId: event.playerId, title: event.title }, { durationMs: 260 })] : [];
+export const adaptMoonVillageProjection = (projection: MoonVillagePublicProjection) => projection.phase === "DAY_ANNOUNCEMENT" ? [create("MOON_VILLAGE_DAY_TRANSITION", `moon-public-${projection.sequence}`, projection.sequence, { phase: projection.phase, round: projection.round }, { durationMs: 260 })] : projection.phase === "FINISHED" ? [create("GAME_RESULT", `moon-public-${projection.sequence}`, projection.sequence, { winnerTeam: projection.winnerTeam, draw: projection.draw }, { priority: "CRITICAL", durationMs: 900 })] : [];
+export type DomainEventAnimationAdapter<T> = (event: T, sourceEventId: string, sequence: number) => AnimationCommand[];
